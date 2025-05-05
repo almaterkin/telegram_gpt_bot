@@ -1,5 +1,5 @@
 import os
-from openai import OpenAI
+import openai
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler,
@@ -9,15 +9,12 @@ from telegram.ext import (
 from fastapi import FastAPI, Request
 import uvicorn
 
-# Получаем токены из переменных окружения
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 WEBHOOK_URL = "https://telegram-gpt-bot-ok6q.onrender.com/telegram"
 
-# Инициализация клиента OpenAI
-client = OpenAI(api_key=OPENAI_API_KEY)
+openai.api_key = OPENAI_API_KEY
 
-# Системный промпт
 system_prompt = {
     "role": "system",
     "content": (
@@ -41,30 +38,22 @@ system_prompt = {
     )
 }
 
-# Инициализация FastAPI и Telegram
 app = FastAPI()
 telegram_app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-# Обработка текстовых сообщений
-@telegram_app.message_handler(filters.TEXT & ~filters.COMMAND)
+# Обработчик сообщений
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
 
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                system_prompt,
-                {"role": "user", "content": user_message}
-            ]
-        )
-        reply = response.choices[0].message.content
-        await update.message.reply_text(reply)
-    except Exception as e:
-        await update.message.reply_text(f"Произошла ошибка: {str(e)}")
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[system_prompt, {"role": "user", "content": user_message}]
+    )
 
-# Команда /start
-@telegram_app.command_handler("start")
+    reply = response['choices'][0]['message']['content']
+    await update.message.reply_text(reply)
+
+# Обработчик команды /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Сәлеметсіз бе! Мен сіздің жеке құқықтық кеңесшіңізбін. Құқықтық мәселелер бойынша көмек қажет болса, әрқашан жаныңыздан табыламын. "
@@ -72,20 +61,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Если вам нужна помощь по юридическим вопросам, я всегда рядом. Задавайте свои вопросы — я предоставлю вам качественную и надёжную консультацию!"
     )
 
-# Установка webhook при запуске
+# Добавляем обработчики в приложение
+telegram_app.add_handler(CommandHandler("start", start))
+telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
 @app.on_event("startup")
 async def on_startup():
     await telegram_app.initialize()
     await telegram_app.bot.set_webhook(url=WEBHOOK_URL)
     await telegram_app.start()
 
-# Обработка входящих обновлений от Telegram
 @app.post("/telegram")
 async def telegram_webhook(request: Request):
     update = await request.json()
     await telegram_app.update_queue.put(Update.de_json(update, telegram_app.bot))
     return {"ok": True}
 
-# Запуск Uvicorn
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
