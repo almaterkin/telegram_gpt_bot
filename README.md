@@ -1,1 +1,2 @@
-# telegram_gpt_bot
+# Telegram GPT Bot
+Простой Telegram-бот с GPT на Render.com.
