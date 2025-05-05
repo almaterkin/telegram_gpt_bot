@@ -9,12 +9,15 @@ from telegram.ext import (
 from fastapi import FastAPI, Request
 import uvicorn
 
+# Инициализация переменных
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 WEBHOOK_URL = "https://telegram-gpt-bot-ok6q.onrender.com/telegram"
 
+# Настройка API OpenAI
 openai.api_key = OPENAI_API_KEY
 
+# Промпт для модели
 system_prompt = {
     "role": "system",
     "content": (
@@ -38,7 +41,10 @@ system_prompt = {
     )
 }
 
+# Создание FastAPI приложения
 app = FastAPI()
+
+# Создание Telegram приложения
 telegram_app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
 # Обработчик сообщений
@@ -61,21 +67,32 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Если вам нужна помощь по юридическим вопросам, я всегда рядом. Задавайте свои вопросы — я предоставлю вам качественную и надёжную консультацию!"
     )
 
-# Добавляем обработчики в приложение
+# Добавляем обработчики в Telegram приложение
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
+# Установка вебхука при старте FastAPI приложения
 @app.on_event("startup")
 async def on_startup():
     await telegram_app.initialize()
-    await telegram_app.bot.set_webhook(url=WEBHOOK_URL)
+    await telegram_app.bot.set_webhook(url=WEBHOOK_URL)  # Установка вебхука
     await telegram_app.start()
 
+# Вебхук для обработки сообщений от Telegram
 @app.post("/telegram")
 async def telegram_webhook(request: Request):
-    update = await request.json()
-    await telegram_app.update_queue.put(Update.de_json(update, telegram_app.bot))
-    return {"ok": True}
+    try:
+        # Получаем данные от Telegram
+        update = await request.json()
+        # Преобразуем их в объект Update
+        telegram_update = Update.de_json(update, telegram_app.bot)
+        # Помещаем запрос в очередь для обработки
+        await telegram_app.update_queue.put(telegram_update)
+        return {"ok": True}
+    except Exception as e:
+        # Обработка ошибок, если что-то пошло не так
+        return {"error": str(e)}
 
+# Запуск FastAPI приложения
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
