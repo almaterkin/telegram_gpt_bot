@@ -2,7 +2,7 @@ import os
 import openai
 from telegram import Update
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler,
+    Application, CommandHandler, MessageHandler,
     ContextTypes, filters
 )
 
@@ -36,10 +36,12 @@ system_prompt = {
         "7. **Источники / Дереккөздер / Sources**\n\n"
         "Если информация найдена через Google, используй её для уточнения ответа!"
     )
-}
+)
 
 app = FastAPI()
-telegram_app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+
+# Создаем объект приложения для Telegram
+telegram_app = Application.builder().token(TELEGRAM_TOKEN).build()
 
 # Обработчик сообщений
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -61,18 +63,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Если вам нужна помощь по юридическим вопросам, я всегда рядом. Задавайте свои вопросы — я предоставлю вам качественную и надёжную консультацию!"
     )
 
-# Добавляем обработчики в приложение
+# Добавляем обработчики команд и сообщений
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
 @app.on_event("startup")
 async def on_startup():
-    await telegram_app.initialize()
+    # Устанавливаем webhook для обработки запросов от Telegram
     await telegram_app.bot.set_webhook(url=WEBHOOK_URL)
-    await telegram_app.start()
 
 @app.post("/telegram")
 async def telegram_webhook(request: Request):
+    # Получаем данные от Telegram и передаем их в приложение
     update = await request.json()
     await telegram_app.update_queue.put(Update.de_json(update, telegram_app.bot))
     return {"ok": True}
