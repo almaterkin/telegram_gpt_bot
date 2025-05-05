@@ -1,5 +1,5 @@
 import os
-import openai
+from openai import OpenAI
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler,
@@ -9,13 +9,15 @@ from telegram.ext import (
 from fastapi import FastAPI, Request
 import uvicorn
 
+# Получаем токены из переменных окружения
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 WEBHOOK_URL = "https://telegram-gpt-bot-ok6q.onrender.com/telegram"
 
-openai.api_key = OPENAI_API_KEY
+# Инициализация клиента OpenAI
+client = OpenAI(api_key=OPENAI_API_KEY)
 
-# Системное сообщение для ChatGPT
+# Системный промпт
 system_prompt = {
     "role": "system",
     "content": (
@@ -39,31 +41,30 @@ system_prompt = {
     )
 }
 
-# FastAPI-приложение
+# Инициализация FastAPI и Telegram
 app = FastAPI()
-
-# Telegram bot
 telegram_app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-# Обработчик текстовых сообщений
+# Обработка текстовых сообщений
+@telegram_app.message_handler(filters.TEXT & ~filters.COMMAND)
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
 
     try:
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
                 system_prompt,
                 {"role": "user", "content": user_message}
             ]
         )
-        reply = response['choices'][0]['message']['content']
+        reply = response.choices[0].message.content
         await update.message.reply_text(reply)
     except Exception as e:
-        await update.message.reply_text("Произошла ошибка при обработке запроса. Попробуйте позже.")
-        print("OpenAI error:", e)
+        await update.message.reply_text(f"Произошла ошибка: {str(e)}")
 
-# Обработчик команды /start
+# Команда /start
+@telegram_app.command_handler("start")
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Сәлеметсіз бе! Мен сіздің жеке құқықтық кеңесшіңізбін. Құқықтық мәселелер бойынша көмек қажет болса, әрқашан жаныңыздан табыламын. "
@@ -71,25 +72,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Если вам нужна помощь по юридическим вопросам, я всегда рядом. Задавайте свои вопросы — я предоставлю вам качественную и надёжную консультацию!"
     )
 
-# Регистрация хендлеров
-telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-telegram_app.add_handler(CommandHandler("start", start))
-
-# Установка вебхука при запуске FastAPI
+# Установка webhook при запуске
 @app.on_event("startup")
 async def on_startup():
     await telegram_app.initialize()
     await telegram_app.bot.set_webhook(url=WEBHOOK_URL)
     await telegram_app.start()
 
-# Обработка запросов от Telegram
+# Обработка входящих обновлений от Telegram
 @app.post("/telegram")
 async def telegram_webhook(request: Request):
-    update_dict = await request.json()
-    update = Update.de_json(update_dict, telegram_app.bot)
-    await telegram_app.update_queue.put(update)
+    update = await request.json()
+    await telegram_app.update_queue.put(Update.de_json(update, telegram_app.bot))
     return {"ok": True}
 
-# Запуск приложения
+# Запуск Uvicorn
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
