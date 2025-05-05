@@ -47,16 +47,22 @@ app = FastAPI()
 # Создание Telegram приложения
 telegram_app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
+# Инициализация OpenAI клиента для асинхронного вызова
+from openai import AsyncOpenAI
+
+client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+
 # Обработчик сообщений
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
 
-    response = openai.ChatCompletion.create(
+    # Вызов OpenAI с использованием нового клиента
+    response = await client.chat.completions.create(
         model="gpt-4",
         messages=[system_prompt, {"role": "user", "content": user_message}]
     )
 
-    reply = response['choices'][0]['message']['content']
+    reply = response.choices[0].message.content
     await update.message.reply_text(reply)
 
 # Обработчик команды /start
