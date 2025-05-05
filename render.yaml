@@ -1,12 +1,13 @@
 services:
   - type: web
-    name: telegram-gpt-bot
+    name: legal-consult-bot
     env: python
-    plan: free
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python main.py"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
     envVars:
       - key: TELEGRAM_TOKEN
-        sync: false
+        value: 8130728694:AAG9Sb_x5LL8oRv_egM8Aw3vldzT3swbNSI
       - key: OPENAI_API_KEY
-        sync: false
+        value: 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
+      - key: WEBHOOK_URL
+        value: https://telegram-gpt-bot-ok6q.onrender.com/telegram
