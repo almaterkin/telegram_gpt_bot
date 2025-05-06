@@ -58,7 +58,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Вызов OpenAI с использованием нового клиента
     response = await client.chat.completions.create(
-        model="gpt-4",
+        model="gpt-4.1-nano",
         messages=[system_prompt, {"role": "user", "content": user_message}]
     )
 
