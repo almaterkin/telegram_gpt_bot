@@ -13,3 +13,4 @@ uvicorn[standard]==0.29.0
 # Библиотека для работы с переменными окружения (если используется .env файл)
 python-dotenv==1.0.1
 nest_asyncio
+python-telegram-bot[webhooks]
