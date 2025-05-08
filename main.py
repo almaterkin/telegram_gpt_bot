@@ -10,18 +10,24 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
+import logging
 
-# Применяем патч для работы asyncio в Render
+# Применяем патч для работы asyncio в Render (или другом сервере)
 nest_asyncio.apply()
+
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger()
 
 # Получаем переменные среды
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
+# Устанавливаем API ключ OpenAI
 openai.api_key = OPENAI_API_KEY
 
-# Промты
+# Промты для разных языков
 PROMPTS = {
     "ru": {
         "role": "system",
@@ -69,6 +75,7 @@ PROMPTS = {
 
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"Start command triggered for user: {update.message.from_user.id}")
     keyboard = [
         [InlineKeyboardButton("Қазақ тілі", callback_data="kz")],
         [InlineKeyboardButton("Русский язык", callback_data="ru")],
@@ -98,18 +105,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⛔ Сначала выберите язык с помощью команды /start")
         return
 
+    logger.info(f"Received message from user {update.message.from_user.id}: {user_message}")
+
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4o",
-            messages=[
-                PROMPTS[lang],
-                {"role": "user", "content": user_message}
-            ]
+            model="gpt-4",  # Используем модель GPT-4
+            messages=[PROMPTS[lang], {"role": "user", "content": user_message}]
         )
         reply = response["choices"][0]["message"]["content"]
         await update.message.reply_text(reply)
     except Exception as e:
-        print("OpenAI error:", e)
+        logger.error(f"OpenAI error: {e}")
         await update.message.reply_text("⚠️ Қате орын алды / Произошла ошибка. Попробуйте позже.")
 
 # Запуск приложения
@@ -120,12 +126,16 @@ async def main():
     app.add_handler(CallbackQueryHandler(choose_language))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    await app.bot.set_webhook(WEBHOOK_URL)
-    await app.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.environ.get("PORT", 5000)),
-        webhook_url=WEBHOOK_URL
-    )
+    # Устанавливаем webhook
+    if WEBHOOK_URL:
+        await app.bot.set_webhook(WEBHOOK_URL)
+        await app.run_webhook(
+            listen="0.0.0.0",
+            port=int(os.environ.get("PORT", 5000)),
+            webhook_url=WEBHOOK_URL
+        )
+    else:
+        logger.error("Webhook URL not set. Please check your environment variables.")
 
 if __name__ == "__main__":
     import asyncio
