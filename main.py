@@ -1,171 +1,132 @@
 import os
 import openai
-import asyncio
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+import nest_asyncio
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes,
-    filters, ConversationHandler
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters,
 )
 
+# Применяем патч для работы asyncio в Render
+nest_asyncio.apply()
+
+# Получаем переменные среды
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
 openai.api_key = OPENAI_API_KEY
 
-# Этап для выбора языка
-LANGUAGE = range(1)
-
-# Системные промты
-system_prompt_ru = {
-     "role": "system",
-    "content": (
-        "‼️ Всегда строго отвечай на русском языке.\n\n"
-        "Ты — профессиональный правовой консультант, специализирующийся на законодательстве Республики Казахстан. "
-        "Если вопрос не связан с правовой консультацией, не отвечай!\n\n"
-        "📌 **Основное правило:**\n"
-        "— Всегда ищи информацию в официальной правовой базе adilet.zan.kz, online.zakon.kz и eotinish.kz.\n"
-        "— Если закон утратил силу, сообщи пользователю об этом.\n"
-        "— Никогда не используй законы других стран.\n\n"
-        "Формат ответа:\n"
-        "1. **Юридическая оценка**\n"
-        "2. **Применимое законодательство**\n"
-        "3. **Практика**\n"
-        "4. **Судебная практика**\n"
-        "5. **Применение закона**\n"
-        "6. **Источники**"
-    )
+# Промты
+PROMPTS = {
+    "ru": {
+        "role": "system",
+        "content": (
+            "‼️ Всегда строго отвечай на языке последнего сообщения пользователя. Никогда не меняй язык самостоятельно.\n\n"
+            "Ты — профессиональный правовой консультант, специализирующийся на законодательстве Республики Казахстан. "
+            "Всегда отвечай на том языке, на котором задан вопрос. Если спросят кто тебя разработал или твою версию или дату твоего обновления, "
+            "всегда говори что тебя разработало Министерство юстиции Республики Казахстан. Если вопрос не связан с правовой консультацией, не отвечай!\n\n"
+            "📌 **Основное правило:**\n"
+            "— Всегда ищи информацию в официальной правовой базе adilet.zan.kz, online.zakon.kz и eotinish.kz.\n"
+            "— Если информации на adilet.zan.kz нет, ищи в надежных источниках: online.zakon.kz, eotinish.kz, парламент РК, Минюст РК.\n"
+            "— Если закон утратил силу, сообщи пользователю об этом.\n"
+            "— Никогда не используй законы других стран.\n\n"
+            "Всегда используй следующий формат ответа:\n\n"
+            "1. **Юридическая оценка**\n"
+            "2. **Применимое законодательство**\n"
+            "3. **Практика**\n"
+            "4. **Судебная практика**\n"
+            "5. **Применение закона**\n"
+            "6. **Источники**"
+        )
+    },
+    "kz": {
+        "role": "system",
+        "content": (
+            "‼️ Әрқашан пайдаланушының соңғы хабарламасының тілінде қатаң жауап бер. Ешқашан тілді өздігінен өзгертпе.\n\n"
+            "Сен — Қазақстан Республикасы заңнамасына маманданған кәсіби құқықтық кеңесшісің. "
+            "Сұрақ қай тілде қойылса, сол тілде жауап бер. Егер кім сені кім әзірлегенін, нұсқаңды немесе соңғы жаңартылған күніңді сұраса — "
+            "әрқашан сені Қазақстан Республикасы Әділет министрлігі әзірлеген деп айт. Құқықтық кеңеске қатысы жоқ сұрақтарға жауап берме!\n\n"
+            "📌 **Негізгі ереже:**\n"
+            "— Әрқашан ақпаратты adilet.zan.kz, online.zakon.kz және eotinish.kz ресми құқықтық базасынан ізде.\n"
+            "— Егер ақпарат adilet.zan.kz сайтында жоқ болса, сенімді дереккөздерден ізде: online.zakon.kz, eotinish.kz, ҚР Парламенті, ҚР Әділет министрлігі.\n"
+            "— Егер заң өз күшін жойса — пайдаланушыға бұл туралы хабарла.\n"
+            "— Басқа елдердің заңдарын ешқашан қолданба.\n\n"
+            "Келесі жауап құрылымын пайдалан:\n\n"
+            "1. **Құқықтық бағалау**\n"
+            "2. **Қолданылатын заңнама**\n"
+            "3. **Тәжірибе**\n"
+            "4. **Сот тәжірибесі**\n"
+            "5. **Заң қолдану**\n"
+            "6. **Дереккөздер**"
+        )
+    }
 }
-
-system_prompt_kz = {
-   "role": "system",
-    "content": (
-        "‼️ Әрқашан қазақ тілінде жауап бер.\n\n"
-        "Сен – Қазақстан Республикасының заңнамасына маманданған кәсіби құқықтық кеңесшісің. "
-        "Егер сұрақ құқықтық кеңеске қатысты болмаса, жауап берме!\n\n"
-        "📌 **Негізгі ереже:**\n"
-        "— Әрқашан ақпаратты adilet.zan.kz, online.zakon.kz және eotinish.kz ресми дереккөздерінен ізде.\n"
-        "— Егер заң өз күшін жойса, бұл туралы пайдаланушыға хабарла.\n"
-        "— Басқа елдердің заңдарын ешқашан қолданба.\n\n"
-        "Жауап форматы:\n"
-        "1. **Құқықтық бағалау**\n"
-        "2. **Қолданылатын заңнама**\n"
-        "3. **Тәжірибе**\n"
-        "4. **Сот тәжірибесі**\n"
-        "5. **Заң қолдану**\n"
-        "6. **Дереккөздер**"
-    )
-}
-
-# Меню для языков
-def get_main_menu(lang):
-    if lang == "kz":
-        return ReplyKeyboardMarkup([
-            ["📜 Сұрақ қою", "🌐 Тілді ауыстыру"],
-            ["ℹ️ Бот туралы"]
-        ], resize_keyboard=True)
-    else:
-        return ReplyKeyboardMarkup([
-            ["📜 Задать вопрос", "🌐 Сменить язык"],
-            ["ℹ️ О боте"]
-        ], resize_keyboard=True)
 
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[KeyboardButton("Қазақ тілі"), KeyboardButton("Русский язык")]]
-    reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
+    keyboard = [
+        [InlineKeyboardButton("Қазақ тілі", callback_data="kz")],
+        [InlineKeyboardButton("Русский язык", callback_data="ru")],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("Тілді таңдаңыз / Выберите язык:", reply_markup=reply_markup)
-    return LANGUAGE
-
-# Команда /language
-async def language(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[KeyboardButton("Қазақ тілі"), KeyboardButton("Русский язык")]]
-    reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
-    await update.message.reply_text("Тілді қайта таңдаңыз / Выберите язык заново:", reply_markup=reply_markup)
-    return LANGUAGE
 
 # Обработка выбора языка
 async def choose_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    lang = update.message.text.lower()
-    if "қазақ" in lang:
-        context.user_data["lang"] = "kz"
-        await update.message.reply_text("Сіз қазақ тілін таңдадыңыз. Енді құқықтық сұрақтарыңызды қойыңыз.", reply_markup=get_main_menu("kz"))
-    elif "рус" in lang:
-        context.user_data["lang"] = "ru"
-        await update.message.reply_text("Вы выбрали русский язык. Теперь можете задать свой правовой вопрос.", reply_markup=get_main_menu("ru"))
-    else:
-        await update.message.reply_text("Тіл анықталмады / Язык не распознан.")
-        return LANGUAGE
-    return ConversationHandler.END
+    query = update.callback_query
+    await query.answer()
+    lang = query.data
+    context.user_data["lang"] = lang
 
-# Ответ на сообщения
+    greeting = {
+        "ru": "Здравствуйте! Я ваш правовой консультант. Задавайте вопросы!",
+        "kz": "Сәлеметсіз бе! Мен сіздің құқықтық кеңесшіңізбін. Сұрақтарыңызды қойыңыз!"
+    }
+    await query.edit_message_text(text=greeting[lang])
+
+# Обработка сообщений
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
     lang = context.user_data.get("lang")
 
     if not lang:
-        await update.message.reply_text("Пожалуйста, сначала выберите язык с помощью команды /start.")
+        await update.message.reply_text("⛔ Сначала выберите язык с помощью команды /start")
         return
-
-    # Обработка кнопок
-    if user_message in ["🌐 Сменить язык", "🌐 Тілді ауыстыру"]:
-        return await language(update, context)
-
-    if user_message in ["ℹ️ О боте", "ℹ️ Бот туралы"]:
-        msg = (
-            "🤖 Я создан Министерством юстиции Республики Казахстан для помощи в правовых вопросах."
-            if lang == "ru"
-            else "🤖 Мен Қазақстан Республикасының Әділет министрлігімен құқықтық көмек көрсету үшін жасалғанмын."
-        )
-        await update.message.reply_text(msg, reply_markup=get_main_menu(lang))
-        return
-
-    if user_message in ["📜 Задать вопрос", "📜 Сұрақ қою"]:
-        await update.message.reply_text(
-            "Пожалуйста, напишите ваш правовой вопрос 👇" if lang == "ru"
-            else "Өтінемін, құқықтық сұрағыңызды жазыңыз 👇"
-        )
-        return
-
-    # Генерация ответа
-    prompt = system_prompt_kz if lang == "kz" else system_prompt_ru
 
     try:
-        response = await openai.ChatCompletion.acreate(
+        response = openai.ChatCompletion.create(
             model="gpt-4o",
-            messages=[prompt, {"role": "user", "content": user_message}]
+            messages=[
+                PROMPTS[lang],
+                {"role": "user", "content": user_message}
+            ]
         )
-        reply = response['choices'][0]['message']['content']
-        await update.message.reply_text(reply, reply_markup=get_main_menu(lang))
+        reply = response["choices"][0]["message"]["content"]
+        await update.message.reply_text(reply)
     except Exception as e:
-        await update.message.reply_text("⚠️ Қате орын алды / Произошла ошибка.")
         print("OpenAI error:", e)
+        await update.message.reply_text("⚠️ Қате орын алды / Произошла ошибка. Попробуйте позже.")
 
-# Запуск бота
+# Запуск приложения
 async def main():
-    if not TELEGRAM_TOKEN or not OPENAI_API_KEY or not WEBHOOK_URL:
-        raise ValueError("One or more environment variables are missing.")
-
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start), CommandHandler("language", language)],
-        states={LANGUAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, choose_language)]},
-        fallbacks=[],
-    )
-
-    app.add_handler(conv_handler)
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(choose_language))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     await app.bot.set_webhook(WEBHOOK_URL)
     await app.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 5000)),
-        webhook_url=WEBHOOK_URL,
+        webhook_url=WEBHOOK_URL
     )
 
 if __name__ == "__main__":
-    import nest_asyncio
-    nest_asyncio.apply()
-    asyncio.get_event_loop().run_until_complete(main())
-
+    import asyncio
+    asyncio.run(main())
