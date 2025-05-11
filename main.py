@@ -114,11 +114,11 @@ if __name__ == "__main__":
         webhook_url = os.getenv("WEBHOOK_URL")  # Убедитесь, что задали в Render
         port = int(os.getenv("PORT", 10000))    # Render автоматически подставит порт
 
-        await app.bot.set_webhook(url=webhook_url)
+        await app.bot.set_webhook(url=f"{webhook_url}/telegram")
         await app.run_webhook(
             listen="0.0.0.0",
             port=port,
-            webhook_url=webhook_url
+            webhook_path="/telegram"  # Важно указать путь
         )
 
     asyncio.run(main())
