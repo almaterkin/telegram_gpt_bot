@@ -15,3 +15,5 @@ services:
         value: ${GOOGLE_API_KEY}
       - key: GOOGLE_CSE_ID
         value: ${GOOGLE_CSE_ID}
+      - key: PORT
+        value: 10000
