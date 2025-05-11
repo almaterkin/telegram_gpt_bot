@@ -94,8 +94,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         answer = response["choices"][0]["message"]["content"]
         await context.bot.send_message(chat_id=chat_id, text=answer)
 
-    except Exception as e:
-        logging.error(f"Ошибка OpenAI: {e}")
+        import traceback
+        except Exception as e:
+        logging.error("Ошибка OpenAI:\n" + traceback.format_exc())
         await context.bot.send_message(chat_id=chat_id, text="Произошла ошибка при обращении к ИИ. Попробуйте позже.")
 
 # Регистрируем обработку обычных сообщений
