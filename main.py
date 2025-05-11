@@ -95,7 +95,7 @@ async def lifespan(app: FastAPI):
 
     # Устанавливаем webhook при старте приложения
     await bot_app.bot.set_webhook(WEBHOOK_URL)
-    yield
+    yield bot_app  # Передаем bot_app, чтобы использовать его в других частях кода
     # Остановка бота при завершении
     await bot_app.bot.delete_webhook()
 
@@ -104,6 +104,8 @@ app = FastAPI(lifespan=lifespan)
 
 @app.post("/telegram")
 async def telegram_webhook(request: Request):
+    # Получаем bot_app из lifespan
+    bot_app = await lifespan(app)  # Инициализация bot_app
     update = Update.de_json(await request.json(), bot_app.bot)
     await bot_app.process_update(update)
     return {"status": "ok"}
