@@ -35,7 +35,7 @@ bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
 
 # Обработчик команды /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Привет! Я ваш правовой консультант. Чем могу помочь?")
+    await update.message.reply_text("Здравствуйте! Я правовой консультант Әділет. Чем могу помочь?")
 
 bot_app.add_handler(CommandHandler("start", start))
 
