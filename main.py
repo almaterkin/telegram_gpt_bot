@@ -8,7 +8,9 @@ from telegram import Update
 from telegram.ext import (
     Application,
     CommandHandler,
-    ContextTypes
+    MessageHandler,
+    ContextTypes,
+    filters
 )
 
 # Для работы asyncio внутри uvicorn
@@ -34,12 +36,45 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 bot_app.add_handler(CommandHandler("start", start))
 
+# Обработчик текстовых сообщений
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_message = update.message.text
+
+    # Промпт для GPT
+    system_prompt = (
+        "Ты — опытный юрист-консультант, специализирующийся на законодательстве Республики Казахстан. "
+        "Отвечай только по законам РК, избегай домыслов и указывай применимое законодательство. "
+        "Если ты не уверен, скажи, что тебе нужно больше информации или что не можешь ответить точно. "
+        "Структура ответа:\n"
+        "1. Юридическая оценка\n"
+        "2. Применимое законодательство\n"
+        "3. Применение закона к фактам\n"
+        "4. Заключение\n"
+        "5. Источники (если есть)\n"
+    )
+
+    try:
+        response = await openai.ChatCompletion.acreate(
+            model="gpt-4",  # Или "gpt-3.5-turbo"
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ]
+        )
+        reply_text = response.choices[0].message.content
+        await update.message.reply_text(reply_text)
+    except Exception as e:
+        logging.error(f"Ошибка OpenAI: {e}")
+        await update.message.reply_text("Произошла ошибка при обработке запроса. Попробуйте позже.")
+
+bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
 # FastAPI
 app = FastAPI()
 
 @app.on_event("startup")
 async def startup():
-    await bot_app.initialize()  # 🔧 ОБЯЗАТЕЛЬНО!
+    await bot_app.initialize()
     await bot_app.bot.set_webhook(WEBHOOK_URL)
     logging.info("✅ Webhook установлен")
 
@@ -54,6 +89,6 @@ async def telegram_webhook(request: Request):
     await bot_app.process_update(update)
     return {"ok": True}
 
-# Локальный запуск (не нужен на Render)
+# Локальный запуск
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=PORT, reload=False)
