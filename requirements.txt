@@ -1,6 +1,6 @@
-python-telegram-bot==20.6
 fastapi
 uvicorn
+python-telegram-bot==20.6
 openai
-httpx
 nest_asyncio
+python-dotenv
