@@ -6,7 +6,7 @@ import requests
 import nest_asyncio
 nest_asyncio.apply()
 from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
+from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, filters, ContextTypes
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -94,12 +94,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"OpenAI Error: {e}")
         await context.bot.send_message(chat_id=chat_id, text="Ошибка при обращении к ИИ.")
 
+# ✅ Обработчик команды /start
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="Здравствуйте! Я — правовой консультант по законодательству Республики Казахстан. Задайте ваш вопрос."
+    )
+
 if __name__ == "__main__":
     import asyncio
 
     async def main():
         app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+        # Добавляем обработчики
+        app.add_handler(CommandHandler("start", start))  # обработка /start
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))  # обработка текстов
 
         webhook_url = os.getenv("WEBHOOK_URL")  # Убедитесь, что задали в Render
         port = int(os.getenv("PORT", 10000))    # Render автоматически подставит порт
