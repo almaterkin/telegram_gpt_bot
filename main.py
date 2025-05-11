@@ -3,6 +3,8 @@ import logging
 import re
 import openai
 import requests
+import nest_asyncio
+nest_asyncio.apply()
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
