@@ -112,13 +112,12 @@ if __name__ == "__main__":
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))  # обработка текстов
 
         webhook_url = os.getenv("WEBHOOK_URL")  # Убедитесь, что задали в Render
-        port = int(os.getenv("PORT", 10000))    # Render автоматически подставит порт
 
-        await app.bot.set_webhook(url=f"{webhook_url}/telegram")
+        await app.bot.set_webhook(url=webhook_url)  # Убираем webhook_path
+
         await app.run_webhook(
             listen="0.0.0.0",
-            port=port,
-            webhook_path="/telegram"  # Важно указать путь
+            port=int(os.getenv("PORT", 10000)),  # Render автоматически подставит порт
         )
 
     asyncio.run(main())
