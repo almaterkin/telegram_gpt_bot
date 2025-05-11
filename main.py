@@ -6,6 +6,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
 import logging
 import uvicorn  # для запуска FastAPI с указанием порта
+from contextlib import asynccontextmanager
 
 # Настроим обработку асинхронных событий
 nest_asyncio.apply()
@@ -84,13 +85,15 @@ bot_app.add_handler(CallbackQueryHandler(choose_language))
 bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
 # Lifespan для инициализации webhook
-@app.on_event("startup")
-async def startup():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Устанавливаем webhook при старте приложения
     await bot_app.bot.set_webhook(WEBHOOK_URL)
-
-@app.on_event("shutdown")
-async def shutdown():
+    yield
+    # Остановка бота при завершении
     await bot_app.bot.delete_webhook()
+
+app = FastAPI(lifespan=lifespan)
 
 @app.post("/telegram")
 async def telegram_webhook(request: Request):
