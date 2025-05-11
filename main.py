@@ -113,7 +113,11 @@ if __name__ == "__main__":
 
         webhook_url = os.getenv("WEBHOOK_URL")  # Убедитесь, что задали в Render
 
-        await app.bot.set_webhook(url=webhook_url)  # Убираем webhook_path
+        # Убедитесь, что передаете правильный URL для webhook
+        if webhook_url.startswith("https://"):
+            await app.bot.set_webhook(url=webhook_url)  # Убираем webhook_path
+        else:
+            logger.error("Ошибка: URL webhook должен начинаться с https://")
 
         await app.run_webhook(
             listen="0.0.0.0",
