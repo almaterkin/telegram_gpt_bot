@@ -1,84 +1,99 @@
+
 import os
 import logging
+import re
 import openai
-import uvicorn
-import nest_asyncio
-from fastapi import FastAPI, Request
+import requests
 from telegram import Update
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    MessageHandler,
-    ContextTypes,
-    filters,
-)
+from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
+from dotenv import load_dotenv
 
-# Для работы asyncio внутри uvicorn
-nest_asyncio.apply()
+load_dotenv()
 
-# Логирование
+# Настройка логирования
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Переменные
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-PORT = int(os.getenv("PORT", 10000))
+openai.api_key = os.getenv("OPENAI_API_KEY")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+GOOGLE_CSE_ID = os.getenv("GOOGLE_CSE_ID")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
-openai.api_key = OPENAI_API_KEY
+# Системный промпт
+system_prompt = {
+    "role": "system",
+    "content": (
+        "‼️ Всегда строго отвечай на языке последнего сообщения пользователя. Никогда не меняй язык самостоятельно.\n\n"
+        "Ты — профессиональный правовой консультант, специализирующийся на законодательстве Республики Казахстан. "
+        "Всегда отвечай на том языке, на котором задан вопрос. "
+        "Если спросят кто тебя разработал или твою версию или дату твоего обновления, всегда говори что тебя разработало Министерство юстиции Республики Казахстан. "
+        "Если вопрос не связан с правовой консультацией, не отвечай!\n\n"
+        "📌 Основное правило:\n"
+        "— Всегда ищи информацию в официальной правовой базе adilet.zan.kz, online.zakon.kz и eotinish.kz.\n"
+        "— Если информации на adilet.zan.kz нет, ищи в надежных источниках: online.zakon.kz, eotinish.kz, парламент РК, Минюст РК.\n"
+        "— Если закон утратил силу, сообщи пользователю об этом.\n"
+        "— Никогда не используй законы других стран.\n\n"
+        "Формат ответа:\n"
+        "1. Юридическая оценка\n"
+        "2. Применимое законодательство\n"
+        "3. Практика\n"
+        "4. Судебная практика\n"
+        "5. Применение закона\n"
+        "6. Источники\n\n"
+        "Если информация найдена через Google, используй её для уточнения ответа!"
+    )
+}
 
-# Telegram приложение
-bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
+chat_histories = {}
 
-# Обработчик команды /start
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Привет! Я ваш правовой консультант. Чем могу помочь?")
+def clean_reply(reply):
+    reply = re.sub(r'\*\*(.*?)\*\*', r'\1', reply)
+    reply = re.sub(r'<strong>(.*?)</strong>', r'\1', reply)
+    return reply
 
-bot_app.add_handler(CommandHandler("start", start))
+def search_google(query):
+    url = f"https://www.googleapis.com/customsearch/v1?q={query}&key={GOOGLE_API_KEY}&cx={GOOGLE_CSE_ID}"
+    try:
+        res = requests.get(url)
+        res.raise_for_status()
+        data = res.json()
+        results = data.get("items", [])
+        links = "\n".join(f"- [{item['title']}]({item['link']})" for item in results[:5])
+        return f"Вот результаты поиска, которые помогут тебе ответить:\n{links}"
+    except Exception as e:
+        logger.error(f"Google Search Error: {e}")
+        return ""
 
-# ✅ Обработка текстовых сообщений с отправкой запроса в OpenAI
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
     chat_id = update.message.chat_id
 
+    history = chat_histories.get(chat_id, [])
+    history.append({"role": "user", "content": user_message})
+
+    messages = [system_prompt] + history
+
+    search_context = search_google(user_message)
+    if search_context:
+        messages.append({"role": "system", "content": search_context})
+
     try:
         response = openai.ChatCompletion.create(
             model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "Ты — юридический консультант, отвечай строго по законам Казахстана, кратко и по делу."},
-                {"role": "user", "content": user_message}
-            ]
+            messages=messages,
+            temperature=0.2
         )
-        answer = response["choices"][0]["message"]["content"]
-        await context.bot.send_message(chat_id=chat_id, text=answer)
+        reply = response["choices"][0]["message"]["content"]
+        reply = clean_reply(reply)
+        history.append({"role": "assistant", "content": reply})
+        chat_histories[chat_id] = history
 
+        await context.bot.send_message(chat_id=chat_id, text=reply, parse_mode="Markdown")
     except Exception as e:
-        logging.error(f"Ошибка OpenAI: {e}")
-        await context.bot.send_message(chat_id=chat_id, text="Произошла ошибка при обращении к ИИ. Попробуйте позже.")
+        logger.error(f"OpenAI Error: {e}")
+        await context.bot.send_message(chat_id=chat_id, text="Ошибка при обращении к ИИ.")
 
-# Регистрируем обработку обычных сообщений
-bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-# FastAPI
-app = FastAPI()
-
-@app.on_event("startup")
-async def startup():
-    await bot_app.initialize()
-    await bot_app.bot.set_webhook(WEBHOOK_URL)
-    logging.info("✅ Webhook установлен")
-
-@app.on_event("shutdown")
-async def shutdown():
-    await bot_app.shutdown()
-
-@app.post("/telegram")
-async def telegram_webhook(request: Request):
-    data = await request.json()
-    update = Update.de_json(data, bot_app.bot)
-    await bot_app.process_update(update)
-    return {"ok": True}
-
-# Локальный запуск (не нужен на Render)
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=PORT, reload=False)
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.run_polling()
