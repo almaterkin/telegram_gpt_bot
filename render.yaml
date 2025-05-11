@@ -3,11 +3,15 @@ services:
     name: legal-consult-bot
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port 10000  # Убедитесь, что запускаете FastAPI сервер
+    startCommand: uvicorn main:app --host 0.0.0.0 --port 10000
     envVars:
       - key: TELEGRAM_TOKEN
-        value: 7600212452:AAG5rIKsxxKX_ahi2XJgw8BRySctnteuLg4
+        value: ${TELEGRAM_TOKEN}
       - key: OPENAI_API_KEY
-        value: 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
+        value: ${OPENAI_API_KEY}
       - key: WEBHOOK_URL
-        value: https://telegram-gpt-bot-ok6q.onrender.com/telegram  # Убедитесь, что URL правильный
+        value: ${WEBHOOK_URL}
+      - key: GOOGLE_API_KEY
+        value: ${GOOGLE_API_KEY}  # твой ключ от Google Custom Search API
+      - key: GOOGLE_CSE_ID
+        value: ${GOOGLE_CSE_ID}  # идентификатор твоей поисковой системы (cx)
