@@ -1,6 +1,5 @@
 import os
 import logging
-import openai
 import uvicorn
 import nest_asyncio
 import requests
@@ -14,6 +13,7 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
+from openai import OpenAI  # ✅ Новый импорт
 
 # Для работы asyncio внутри uvicorn
 nest_asyncio.apply()
@@ -29,7 +29,8 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 GOOGLE_CSE_ID = os.getenv("GOOGLE_CSE_ID")
 PORT = int(os.getenv("PORT", 10000))
 
-openai.api_key = OPENAI_API_KEY
+# ✅ Новый клиент OpenAI
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 # Telegram приложение
 bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -88,11 +89,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if search_context:
             messages.append({"role": "system", "content": search_context})
 
-        response = openai.ChatCompletion.create(
+        # ✅ Новый вызов OpenAI Chat API
+        response = client.chat.completions.create(
             model="gpt-4o",
             messages=messages
         )
-        answer = response["choices"][0]["message"]["content"]
+        answer = response.choices[0].message.content
         await context.bot.send_message(chat_id=chat_id, text=answer)
 
     except Exception as e:
