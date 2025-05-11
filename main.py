@@ -12,6 +12,7 @@ from telegram.ext import (
     filters,
 )
 import logging
+from contextlib import asynccontextmanager
 
 # Настроим обработку асинхронных событий
 nest_asyncio.apply()
@@ -85,15 +86,20 @@ bot_app.add_handler(CommandHandler("start", start))
 bot_app.add_handler(CallbackQueryHandler(choose_language))
 bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-# Webhook обработчик
-@app.on_event("startup")
-async def on_startup():
+# Lifespan для инициализации webhook
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Устанавливаем webhook при старте приложения
     await bot_app.bot.set_webhook(WEBHOOK_URL)
+    yield
+    # Остановка бота при завершении
+    await bot_app.bot.delete_webhook()
+
+# Применяем lifespan
+app = FastAPI(lifespan=lifespan)
 
 @app.post("/telegram")
 async def telegram_webhook(request: Request):
     update = Update.de_json(await request.json(), bot_app.bot)
     await bot_app.process_update(update)
     return {"status": "ok"}
-
-
