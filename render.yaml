@@ -6,12 +6,12 @@ services:
     startCommand: uvicorn main:app --host 0.0.0.0 --port 10000
     envVars:
       - key: TELEGRAM_TOKEN
-        value: ${TELEGRAM_TOKEN}
+        value: "7600212452:AAHLYwTtwYodw51G0fX0gu2l3X-6dtl3m7M"
       - key: OPENAI_API_KEY
-        value: ${OPENAI_API_KEY}
+        value: "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"
       - key: WEBHOOK_URL
-        value: ${WEBHOOK_URL}
+        value: "https://telegram-gpt-bot-ok6q.onrender.com/telegram"
       - key: GOOGLE_API_KEY
-        value: ${GOOGLE_API_KEY}
+        value: "AIzaSyDqUyGjbLTR4C8K-UqKdhUGQDxNeRqaUGw"
       - key: GOOGLE_CSE_ID
-        value: ${GOOGLE_CSE_ID}
+        value: "f6f375fd64ecb4cb2"
