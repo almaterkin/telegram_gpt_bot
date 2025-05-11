@@ -10,7 +10,7 @@ from telegram.ext import (
     CommandHandler,
     MessageHandler,
     ContextTypes,
-    filters
+    filters,
 )
 
 # Для работы asyncio внутри uvicorn
@@ -36,37 +36,27 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 bot_app.add_handler(CommandHandler("start", start))
 
-# Обработчик текстовых сообщений
+# ✅ Обработка текстовых сообщений с отправкой запроса в OpenAI
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
-
-    # Промпт для GPT
-    system_prompt = (
-        "Ты — опытный юрист-консультант, специализирующийся на законодательстве Республики Казахстан. "
-        "Отвечай только по законам РК, избегай домыслов и указывай применимое законодательство. "
-        "Если ты не уверен, скажи, что тебе нужно больше информации или что не можешь ответить точно. "
-        "Структура ответа:\n"
-        "1. Юридическая оценка\n"
-        "2. Применимое законодательство\n"
-        "3. Применение закона к фактам\n"
-        "4. Заключение\n"
-        "5. Источники (если есть)\n"
-    )
+    chat_id = update.message.chat_id
 
     try:
-        response = await openai.ChatCompletion.acreate(
-            model="gpt-4",  # Или "gpt-3.5-turbo"
+        response = openai.ChatCompletion.create(
+            model="gpt-4o",
             messages=[
-                {"role": "system", "content": system_prompt},
+                {"role": "system", "content": "Ты — юридический консультант, отвечай строго по законам Казахстана, кратко и по делу."},
                 {"role": "user", "content": user_message}
             ]
         )
-        reply_text = response.choices[0].message.content
-        await update.message.reply_text(reply_text)
+        answer = response["choices"][0]["message"]["content"]
+        await context.bot.send_message(chat_id=chat_id, text=answer)
+
     except Exception as e:
         logging.error(f"Ошибка OpenAI: {e}")
-        await update.message.reply_text("Произошла ошибка при обработке запроса. Попробуйте позже.")
+        await context.bot.send_message(chat_id=chat_id, text="Произошла ошибка при обращении к ИИ. Попробуйте позже.")
 
+# Регистрируем обработку обычных сообщений
 bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
 # FastAPI
@@ -89,6 +79,6 @@ async def telegram_webhook(request: Request):
     await bot_app.process_update(update)
     return {"ok": True}
 
-# Локальный запуск
+# Локальный запуск (не нужен на Render)
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=PORT, reload=False)
