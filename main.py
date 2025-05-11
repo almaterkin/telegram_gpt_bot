@@ -82,15 +82,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # FastAPI приложение
 app = FastAPI()
-bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
-
-bot_app.add_handler(CommandHandler("start", start))
-bot_app.add_handler(CallbackQueryHandler(choose_language))
-bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
 # Lifespan для инициализации webhook
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Инициализация Telegram бота
+    bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
+
+    bot_app.add_handler(CommandHandler("start", start))
+    bot_app.add_handler(CallbackQueryHandler(choose_language))
+    bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
     # Устанавливаем webhook при старте приложения
     await bot_app.bot.set_webhook(WEBHOOK_URL)
     yield
