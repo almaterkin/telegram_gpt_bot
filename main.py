@@ -13,6 +13,7 @@ from telegram.ext import (
 )
 import logging
 from contextlib import asynccontextmanager
+import uvicorn  # для запуска FastAPI с указанием порта
 
 # Настроим обработку асинхронных событий
 nest_asyncio.apply()
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+PORT = os.getenv("PORT", 8000)  # Порт по умолчанию
 
 openai.api_key = OPENAI_API_KEY
 
@@ -103,3 +105,7 @@ async def telegram_webhook(request: Request):
     update = Update.de_json(await request.json(), bot_app.bot)
     await bot_app.process_update(update)
     return {"status": "ok"}
+
+# Запуск приложения на правильном порту
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=int(PORT))
