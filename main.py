@@ -1,16 +1,10 @@
 import os
 import openai
-import nest_asyncio
 from fastapi import FastAPI, Request
 from telegram import Update
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    MessageHandler,
-    ContextTypes,
-    filters,
-)
+from telegram.ext import Application, CommandHandler, ContextTypes
 import logging
+import nest_asyncio
 import uvicorn
 
 # Настроим обработку асинхронных событий
@@ -24,63 +18,39 @@ logger = logging.getLogger(__name__)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-PORT = os.getenv("PORT", 8000)  # Порт по умолчанию
+PORT = os.getenv("PORT", 10000)  # Порт по умолчанию
 
 openai.api_key = OPENAI_API_KEY
 
-# Промт для GPT
-PROMPT = {
-    "ru": {
-        "role": "system",
-        "content": "‼️ Всегда строго отвечай на языке последнего сообщения пользователя..."
-    },
-    "kz": {
-        "role": "system",
-        "content": "‼️ Әрқашан пайдаланушының соңғы хабарламасының тілінде қатаң жауап бер..."
-    }
-}
-
 # Обработчики
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Убираем выбор языка, сразу начинаем обработку
-    greeting = {
-        "ru": "Здравствуйте! Я ваш правовой консультант. Задавайте вопросы!",
-        "kz": "Сәлеметсіз бе! Мен сіздің құқықтық кеңесшіңізбін. Сұрақтарыңызды қойыңыз!"
-    }
-    lang = "ru"  # По умолчанию русский
-    await update.message.reply_text(greeting[lang])
-
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_message = update.message.text
-    lang = "ru"  # Установим язык, например, русский
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[PROMPT[lang], {"role": "user", "content": user_message}]
-        )
-        reply = response["choices"][0]["message"]["content"]
-        await update.message.reply_text(reply)
-    except Exception as e:
-        logger.error(e)
-        await update.message.reply_text("⚠️ Ошибка. Попробуйте позже.")
+    # Отправить приветственное сообщение
+    await update.message.reply_text("Привет! Я ваш правовой консультант. Чем могу помочь?")
 
 # FastAPI приложение
 app = FastAPI()
+
 bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
 
+# Установим обработчики
 bot_app.add_handler(CommandHandler("start", start))
-bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-@app.get("/")
-async def read_root():
-    return {"message": "Приложение работает"}
+# Применяем Lifespan
+@app.on_event("startup")
+async def on_startup():
+    await bot_app.bot.set_webhook(WEBHOOK_URL)
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    await bot_app.bot.delete_webhook()
 
 @app.post("/telegram")
 async def telegram_webhook(request: Request):
+    # Получаем обновления от Telegram
     update = Update.de_json(await request.json(), bot_app.bot)
     await bot_app.process_update(update)
     return {"status": "ok"}
 
-# Запуск приложения на правильном порту
+# Запуск приложения с указанием порта
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(PORT))
