@@ -3,16 +3,8 @@ import openai
 import nest_asyncio
 from fastapi import FastAPI, Request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    CallbackQueryHandler,
-    MessageHandler,
-    ContextTypes,
-    filters,
-)
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
 import logging
-from contextlib import asynccontextmanager
 import uvicorn  # для запуска FastAPI с указанием порта
 
 # Настроим обработку асинхронных событий
@@ -83,29 +75,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # FastAPI приложение
 app = FastAPI()
 
+# Инициализация Telegram бота
+bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
+
+# Регистрируем обработчики
+bot_app.add_handler(CommandHandler("start", start))
+bot_app.add_handler(CallbackQueryHandler(choose_language))
+bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
 # Lifespan для инициализации webhook
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Инициализация Telegram бота
-    bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
-
-    bot_app.add_handler(CommandHandler("start", start))
-    bot_app.add_handler(CallbackQueryHandler(choose_language))
-    bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    # Устанавливаем webhook при старте приложения
+@app.on_event("startup")
+async def startup():
     await bot_app.bot.set_webhook(WEBHOOK_URL)
-    yield bot_app  # Передаем bot_app, чтобы использовать его в других частях кода
-    # Остановка бота при завершении
-    await bot_app.bot.delete_webhook()
 
-# Применяем lifespan
-app = FastAPI(lifespan=lifespan)
+@app.on_event("shutdown")
+async def shutdown():
+    await bot_app.bot.delete_webhook()
 
 @app.post("/telegram")
 async def telegram_webhook(request: Request):
-    # Получаем bot_app из lifespan
-    bot_app = await lifespan(app)  # Инициализация bot_app
+    # Получаем обновления от Telegram
     update = Update.de_json(await request.json(), bot_app.bot)
     await bot_app.process_update(update)
     return {"status": "ok"}
