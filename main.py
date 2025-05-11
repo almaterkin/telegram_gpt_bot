@@ -4,6 +4,7 @@ import openai
 import uvicorn
 import nest_asyncio
 import requests
+import traceback
 from fastapi import FastAPI, Request
 from telegram import Update
 from telegram.ext import (
@@ -94,8 +95,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         answer = response["choices"][0]["message"]["content"]
         await context.bot.send_message(chat_id=chat_id, text=answer)
 
-        import traceback
-        except Exception as e:
+    except Exception as e:
         logging.error("Ошибка OpenAI:\n" + traceback.format_exc())
         await context.bot.send_message(chat_id=chat_id, text="Произошла ошибка при обращении к ИИ. Попробуйте позже.")
 
