@@ -11,9 +11,9 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
-from telegram.ext.webhook import WebhookRequestHandler
 import logging
 
+# Настроим обработку асинхронных событий
 nest_asyncio.apply()
 
 # Логирование
@@ -31,15 +31,11 @@ openai.api_key = OPENAI_API_KEY
 PROMPTS = {
     "ru": {
         "role": "system",
-        "content": (
-            "‼️ Всегда строго отвечай на языке последнего сообщения пользователя..."
-        )
+        "content": "‼️ Всегда строго отвечай на языке последнего сообщения пользователя..."
     },
     "kz": {
         "role": "system",
-        "content": (
-            "‼️ Әрқашан пайдаланушының соңғы хабарламасының тілінде қатаң жауап бер..."
-        )
+        "content": "‼️ Әрқашан пайдаланушының соңғы хабарламасының тілінде қатаң жауап бер..."
     }
 }
 
@@ -99,4 +95,5 @@ async def telegram_webhook(request: Request):
     update = Update.de_json(await request.json(), bot_app.bot)
     await bot_app.process_update(update)
     return {"status": "ok"}
+
 
