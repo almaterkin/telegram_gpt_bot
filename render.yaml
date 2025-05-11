@@ -12,6 +12,6 @@ services:
       - key: WEBHOOK_URL
         value: ${WEBHOOK_URL}
       - key: GOOGLE_API_KEY
-        value: ${GOOGLE_API_KEY}  # твой ключ от Google Custom Search API
+        value: ${GOOGLE_API_KEY}
       - key: GOOGLE_CSE_ID
-        value: ${GOOGLE_CSE_ID}  # идентификатор твоей поисковой системы (cx)
+        value: ${GOOGLE_CSE_ID}
