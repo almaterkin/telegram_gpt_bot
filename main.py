@@ -12,22 +12,17 @@ from telegram.ext import (
 )
 import logging
 
-# Применяем патч для работы asyncio в Render (или другом сервере)
 nest_asyncio.apply()
 
-# Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
 
-# Получаем переменные среды
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-# Устанавливаем API ключ OpenAI
 openai.api_key = OPENAI_API_KEY
 
-# Промты для разных языков
 PROMPTS = {
     "ru": {
         "role": "system",
@@ -73,15 +68,20 @@ PROMPTS = {
     }
 }
 
-# Команда /start
+# /start команда
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info(f"Start command triggered for user: {update.message.from_user.id}")
+    logger.info(f"/start вызван. Update: {update.to_dict()}")
+    message = update.message or update.effective_message
+    if not message:
+        logger.warning("⚠️ update.message is None. Невозможно отправить меню.")
+        return
+
     keyboard = [
         [InlineKeyboardButton("Қазақ тілі", callback_data="kz")],
         [InlineKeyboardButton("Русский язык", callback_data="ru")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Тілді таңдаңыз / Выберите язык:", reply_markup=reply_markup)
+    await message.reply_text("Тілді таңдаңыз / Выберите язык:", reply_markup=reply_markup)
 
 # Обработка выбора языка
 async def choose_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -105,17 +105,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⛔ Сначала выберите язык с помощью команды /start")
         return
 
-    logger.info(f"Received message from user {update.message.from_user.id}: {user_message}")
+    logger.info(f"Получено сообщение от пользователя {update.message.from_user.id}: {user_message}")
 
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4",  # Используем модель GPT-4
+            model="gpt-4",
             messages=[PROMPTS[lang], {"role": "user", "content": user_message}]
         )
         reply = response["choices"][0]["message"]["content"]
         await update.message.reply_text(reply)
     except Exception as e:
-        logger.error(f"OpenAI error: {e}")
+        logger.error(f"OpenAI ошибка: {e}")
         await update.message.reply_text("⚠️ Қате орын алды / Произошла ошибка. Попробуйте позже.")
 
 # Запуск приложения
@@ -126,7 +126,6 @@ async def main():
     app.add_handler(CallbackQueryHandler(choose_language))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # Устанавливаем webhook
     if WEBHOOK_URL:
         await app.bot.set_webhook(WEBHOOK_URL)
         await app.run_webhook(
@@ -135,7 +134,7 @@ async def main():
             webhook_url=WEBHOOK_URL
         )
     else:
-        logger.error("Webhook URL not set. Please check your environment variables.")
+        logger.error("WEBHOOK_URL не установлен.")
 
 if __name__ == "__main__":
     import asyncio
