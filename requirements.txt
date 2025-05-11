@@ -1,16 +1,6 @@
-# Telegram API library, version 20.6, для работы с Telegram ботом
 python-telegram-bot==20.6
-
-# OpenAI Python client (версии >=1.0.0), для работы с GPT
-openai>=1.0.0
-
-# FastAPI framework для создания веб-сервиса
-fastapi==0.110.0
-
-# Uvicorn — ASGI сервер для запуска FastAPI приложения
-uvicorn[standard]==0.29.0
-
-# Библиотека для работы с переменными окружения (если используется .env файл)
-python-dotenv==1.0.1
+fastapi
+uvicorn
+openai
+httpx
 nest_asyncio
-python-telegram-bot[webhooks]
