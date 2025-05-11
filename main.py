@@ -1,64 +1,57 @@
 import os
 import openai
 import nest_asyncio
+from fastapi import FastAPI, Request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    ApplicationBuilder,
+    Application,
     CommandHandler,
-    MessageHandler,
     CallbackQueryHandler,
+    MessageHandler,
     ContextTypes,
     filters,
 )
+from telegram.ext.webhook import WebhookRequestHandler
 import logging
 
 nest_asyncio.apply()
 
 # Логирование
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
-# Переменные среды
+# Переменные окружения
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # Должно содержать /telegram на конце
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-# OpenAI API
 openai.api_key = OPENAI_API_KEY
 
+# Языковые промты
 PROMPTS = {
     "ru": {
         "role": "system",
         "content": (
-            "‼️ Всегда строго отвечай на языке последнего сообщения пользователя. Никогда не меняй язык самостоятельно.\n\n"
-            "Ты — профессиональный правовой консультант, специализирующийся на законодательстве Республики Казахстан..."
-            # ... остальной текст
+            "‼️ Всегда строго отвечай на языке последнего сообщения пользователя..."
         )
     },
     "kz": {
         "role": "system",
         "content": (
             "‼️ Әрқашан пайдаланушының соңғы хабарламасының тілінде қатаң жауап бер..."
-            # ... остальной текст
         )
     }
 }
 
-# /start
+# Обработчики
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.effective_message
-    if not message:
-        logger.warning("No effective_message in /start")
-        return
-    logger.info(f"/start from user: {message.from_user.id}")
     keyboard = [
         [InlineKeyboardButton("Қазақ тілі", callback_data="kz")],
         [InlineKeyboardButton("Русский язык", callback_data="ru")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await message.reply_text("Тілді таңдаңыз / Выберите язык:", reply_markup=reply_markup)
+    await update.message.reply_text("Тілді таңдаңыз / Выберите язык:", reply_markup=reply_markup)
 
-# Выбор языка
 async def choose_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -71,16 +64,12 @@ async def choose_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
     await query.edit_message_text(text=greeting[lang])
 
-# Обработка сообщений
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
     lang = context.user_data.get("lang")
-
     if not lang:
-        await update.message.reply_text("⛔ Сначала выберите язык с помощью команды /start")
+        await update.message.reply_text("Сначала выберите язык с помощью /start")
         return
-
-    logger.info(f"Message from {update.message.from_user.id}: {user_message}")
     try:
         response = openai.ChatCompletion.create(
             model="gpt-4",
@@ -89,28 +78,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = response["choices"][0]["message"]["content"]
         await update.message.reply_text(reply)
     except Exception as e:
-        logger.error(f"OpenAI error: {e}")
-        await update.message.reply_text("⚠️ Қате орын алды / Произошла ошибка. Попробуйте позже.")
+        logger.error(e)
+        await update.message.reply_text("⚠️ Ошибка. Попробуйте позже.")
 
-# Запуск
-async def main():
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+# FastAPI приложение
+app = FastAPI()
+bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(choose_language))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+bot_app.add_handler(CommandHandler("start", start))
+bot_app.add_handler(CallbackQueryHandler(choose_language))
+bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    if WEBHOOK_URL:
-        await app.bot.set_webhook(WEBHOOK_URL)
-        await app.run_webhook(
-            listen="0.0.0.0",
-            port=int(os.environ.get("PORT", 5000)),
-            webhook_url=WEBHOOK_URL,
-            path="/telegram"  # ВАЖНО: путь должен совпадать с тем, что в WEBHOOK_URL
-        )
-    else:
-        logger.error("❌ WEBHOOK_URL не установлен!")
+# Webhook обработчик
+@app.on_event("startup")
+async def on_startup():
+    await bot_app.bot.set_webhook(WEBHOOK_URL)
 
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+@app.post("/telegram")
+async def telegram_webhook(request: Request):
+    update = Update.de_json(await request.json(), bot_app.bot)
+    await bot_app.process_update(update)
+    return {"status": "ok"}
+
