@@ -71,6 +71,10 @@ bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
 bot_app.add_handler(CommandHandler("start", start))
 bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
+@app.get("/")
+async def read_root():
+    return {"message": "Приложение работает"}
+
 @app.post("/telegram")
 async def telegram_webhook(request: Request):
     update = Update.de_json(await request.json(), bot_app.bot)
